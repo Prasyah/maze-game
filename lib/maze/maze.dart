@@ -1,6 +1,9 @@
-import 'package:FlameExamples/examples/maze/recursive_maze.dart';
+import 'package:FlameExamples/maze/recursive_maze.dart';
 import 'package:flutter/material.dart';
 import 'package:flame/game.dart';
+import 'package:sensors_plus/sensors_plus.dart'; // Import the sensors package
+import 'package:flutter/services.dart'; // Import services for keeping the screen on
+import 'dart:async'; // Import async package for better event handling
 
 class Maze extends Game {
   late List walls;
@@ -8,14 +11,22 @@ class Maze extends Game {
 
   double playerX = 0; // Initial X position of the player
   double playerY = 0; // Initial Y position of the player
-  double playerRadius = 8; // Radius of the player (ball)
+  double playerRadius = 6; // Radius of the player (ball), reduced for smaller size
 
-  double gravity = 200; // Gravity acceleration in pixels per second squared
+  double gravityX = 0; // Gravity acceleration in X direction
+  double gravityY = 0; // Gravity acceleration in Y direction
+  double velocityX = 0; // Horizontal velocity of the player
   double velocityY = 0; // Vertical velocity of the player
+  double bounceFactor = -0.6; // Bounce factor to reverse velocity and reduce it
 
   Vector2? screenSize; // Store the size of the canvas
   bool isMazeRendered = false; // Flag to track if the maze is fully rendered
   bool isBallPlaced = false; // Flag to track if the ball has been placed
+
+  double accelerometerX = 0; // Variable to store accelerometer X value
+  double accelerometerY = 0; // Variable to store accelerometer Y value
+
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
   Maze() {
     // Build the maze and initiate the walls
@@ -24,6 +35,29 @@ class Maze extends Game {
     // Simulate a delay to indicate maze rendering has completed
     Future.delayed(Duration(milliseconds: 2700), () {
       isMazeRendered = true; // Set maze rendered flag to true after some time
+    });
+
+    // Keep the screen awake while the game is running
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(statusBarColor: Colors.transparent));
+  }
+
+  @override
+  void onDetach() {
+    // Cancel the accelerometer subscription when the game is detached
+    _accelerometerSubscription?.cancel();
+    super.onDetach();
+  }
+
+  void startAccelerometer() {
+    // Listen to accelerometer events to update gravity direction
+    _accelerometerSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
+      gravityX = -event.x * 100; // Adjust gravity based on accelerometer X axis for horizontal movement
+      gravityY = event.y * 100; // Adjust gravity based on accelerometer Y axis for vertical movement
+
+      accelerometerX = event.x; // Update accelerometer X value for display
+      accelerometerY = event.y; // Update accelerometer Y value for display
     });
   }
 
@@ -36,6 +70,7 @@ class Maze extends Game {
           playerX = 16 + x * 16 + playerRadius; // Center the ball in the cell
           playerY = 16 + y * 16 + playerRadius; // Center the ball in the cell
           isBallPlaced = true; // Set ball placed flag to true
+          startAccelerometer(); // Start reading accelerometer once the ball is placed
           return;
         }
       }
@@ -99,23 +134,44 @@ class Maze extends Game {
       playerPaint.color = Colors.blue;
       c.drawCircle(Offset(playerX, playerY), playerRadius, playerPaint);
     }
+
+    // Draw accelerometer readings at the bottom of the screen
+    if (screenSize != null) {
+      TextPainter textPainter = TextPainter(
+        text: TextSpan(
+          text: 'Accelerometer X: ${accelerometerX.toStringAsFixed(2)}, Y: ${accelerometerY.toStringAsFixed(2)}',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      textPainter.paint(c, Offset(10, screenSize!.y - 30));
+    }
   }
 
   @override
   void update(double t) {
     if (!isBallPlaced) return; // No updates needed if the ball isn't placed yet
 
-    // Apply gravity to the vertical velocity
-    velocityY += gravity * t;
+    // Apply gravity to the velocity
+    velocityX += gravityX * t;
+    velocityY += gravityY * t;
 
     // Calculate the new player position based on the velocity
+    double newPlayerX = playerX + velocityX * t;
     double newPlayerY = playerY + velocityY * t;
 
-    // Collision detection with walls
-    if (!isCollidingWithWall(playerX, newPlayerY)) {
-      playerY = newPlayerY; // Update position if no collision
+    // Handle collision with walls by stopping the movement in the direction of collision
+    if (!isCollidingWithWall(newPlayerX, playerY)) {
+      playerX = newPlayerX; // Update X position if no collision
     } else {
-      velocityY = 0; // Stop falling when colliding with a wall
+      velocityX = 0; // Stop horizontal movement on collision
+    }
+
+    if (!isCollidingWithWall(playerX, newPlayerY)) {
+      playerY = newPlayerY; // Update Y position if no collision
+    } else {
+      velocityY = 0; // Stop vertical movement on collision
     }
   }
 
