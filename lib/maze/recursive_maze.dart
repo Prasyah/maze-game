@@ -4,19 +4,21 @@ class RecursiveMaze {
   late int width, height;
   late OrientationType mOrientationType;
 
-  RecursiveMaze() {
-    //
-  }
+  RecursiveMaze() {}
 
-  List build(int width, int height,
-      {OrientationType orientationType = OrientationType.symmetrical}) {
+  // Modifikasi: build() mengembalikan Future
+  Future<List> build(int width, int height,
+      {OrientationType orientationType = OrientationType.symmetrical}) async {
     mOrientationType = orientationType;
     List wallList = [];
 
+    // Bangun dinding luar terlebih dahulu
     getSquare(width, height, wallList);
-    divideChamber(0, 0, width, height, wallList, true);
 
-    return wallList;
+    // Menunggu divisi chamber selesai sebelum mengembalikan hasil
+    await divideChamber(0, 0, width, height, wallList, true);
+
+    return wallList; // Mengembalikan wallList setelah maze selesai
   }
 
   void getSquare(int width, int height, List wallList) {
@@ -50,7 +52,7 @@ class RecursiveMaze {
       for (int y = 0; y < height; y++) {
         if (r != y) {
           wallList.add({'x': posX + halfWallX, 'y': posY + y});
-          await Future.delayed(Duration(milliseconds: 10));
+          await Future.delayed(Duration(milliseconds: 10)); // Menunggu sedikit di antara wall placement
         }
       }
     } else {
@@ -59,7 +61,7 @@ class RecursiveMaze {
       for (int x = 0; x < width; x++) {
         if (r != x) {
           wallList.add({'x': posX + x, 'y': posY + halfWallY});
-          await Future.delayed(Duration(milliseconds: 10));
+          await Future.delayed(Duration(milliseconds: 10)); // Menunggu sedikit di antara wall placement
         }
       }
     }
