@@ -41,19 +41,20 @@ class Maze extends Game {
     return "$minutesStr:$secondsStr";
   }
 
+  // Asynchronous Maze Generation
+  Future<void> generateMaze() async {
+    walls = await RecursiveMaze().buildAsync(21, 21, orientationType: OrientationType.randomized);
+    isMazeRendered = true; // Set the flag to indicate the maze is rendered
+  }
+
   Maze() {
     // Make the screen to stay awake
     WakelockPlus.enable();
+    
+    // Start the maze generation asynchronously
+    generateMaze();
 
-    // Build the maze and initiate the walls
-    walls = RecursiveMaze().build(21, 21, orientationType: OrientationType.randomized);
-
-    // Simulate a delay to indicate maze rendering has completed
-    Future.delayed(Duration(milliseconds: 2700), () {
-      isMazeRendered = true; // Set maze rendered flag to true after some time
-    });
-
-    // Keep the screen awake while the game is running
+    // Set the system UI modes
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(statusBarColor: Colors.transparent));
@@ -125,80 +126,80 @@ class Maze extends Game {
   }
 
   @override
-void render(Canvas c) {
-  if (screenSize == null) return; // If the size isn't initialized yet, do nothing
+  void render(Canvas c) {
+    if (screenSize == null) return; // If the size isn't initialized yet, do nothing
 
-  var bgPaint = Paint();
-  bgPaint.color = Colors.black;
+    var bgPaint = Paint();
+    bgPaint.color = Colors.black;
 
-  // Draw the background
-  c.drawRect(
-    Rect.fromLTWH(0, 0, screenSize!.x, screenSize!.y),
-    bgPaint,
-  );
+    // Draw the background
+    c.drawRect(
+      Rect.fromLTWH(0, 0, screenSize!.x, screenSize!.y),
+      bgPaint,
+    );
 
-  // Draw the formatted timer above the maze
-  String formattedTime = getFormattedTime();
-  TextPainter timerTextPainter = TextPainter(
-    text: TextSpan(
-      text: 'Elapsed Time: $formattedTime',
-      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-    ),
-    textDirection: TextDirection.ltr,
-  );
-  timerTextPainter.layout();
-  timerTextPainter.paint(c, Offset(screenSize!.x / 2 - timerTextPainter.width / 2, timerTextPainter.height * 2));
-
-  // Calculate the center offset for the maze
-  double mazeWidth = 21 * 16;  // Width of the maze (21 cells * 16 pixels per cell)
-  double mazeHeight = 21 * 16; // Height of the maze (21 cells * 16 pixels per cell)
-  double offsetX = (screenSize!.x - mazeWidth - 32) / 2; // Horizontal offset to center maze
-  double offsetY = (screenSize!.y - mazeHeight - 32) / 2; // Vertical offset to center maze
-
-  // Set up the wall paint object
-  Paint wallPaint = Paint();
-  wallPaint.color = Colors.white;
-
-  // Draw the walls
-  for (var wall in walls) {
-    // Wall properties
-    double wallX = offsetX + 16 + double.parse(wall['x'].toString()) * 16; // Wall's X position with offset
-    double wallY = offsetY + 16 + double.parse(wall['y'].toString()) * 16; // Wall's Y position with offset
-    double wallSize = 16; // Wall size
-
-    // Define the wall rect
-    Rect wallRect = Rect.fromLTWH(wallX, wallY, wallSize, wallSize);
-
-    // Draw the wall
-    c.drawRect(wallRect, wallPaint);
-  }
-
-  // Place the ball once the maze is rendered
-  if (isMazeRendered && !isBallPlaced) {
-    placeBallInFreeSpace();
-  }
-
-  // Draw the player (ball) if it has been placed
-  if (isBallPlaced) {
-    Paint playerPaint = Paint();
-    playerPaint.color = Colors.blue;
-    c.drawCircle(Offset(playerX + offsetX, playerY + offsetY), playerRadius, playerPaint);
-  }
-
-  // Draw win message if the player has won
-  if (hasWon && screenSize != null) {
-    WakelockPlus.disable();
-    TextPainter winTextPainter = TextPainter(
+    // Draw the formatted timer above the maze
+    String formattedTime = getFormattedTime();
+    TextPainter timerTextPainter = TextPainter(
       text: TextSpan(
-        text: 'Alarm silenced!',
-        style: TextStyle(color: Colors.green, fontSize: 32, fontWeight: FontWeight.bold),
+        text: 'Elapsed Time: $formattedTime',
+        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
       ),
       textDirection: TextDirection.ltr,
     );
-    winTextPainter.layout();
-    winTextPainter.paint(c, Offset(screenSize!.x / 2 - winTextPainter.width / 2, screenSize!.y - winTextPainter.height * 4));
+    timerTextPainter.layout();
+    timerTextPainter.paint(c, Offset(screenSize!.x / 2 - timerTextPainter.width / 2, timerTextPainter.height * 2));
+
+    // Calculate the center offset for the maze
+    double mazeWidth = 21 * 16;  // Width of the maze (21 cells * 16 pixels per cell)
+    double mazeHeight = 21 * 16; // Height of the maze (21 cells * 16 pixels per cell)
+    double offsetX = (screenSize!.x - mazeWidth - 32) / 2; // Horizontal offset to center maze
+    double offsetY = (screenSize!.y - mazeHeight - 32) / 2; // Vertical offset to center maze
+
+    // Set up the wall paint object
+    Paint wallPaint = Paint();
+    wallPaint.color = Colors.white;
+
+    // Draw the walls
+    for (var wall in walls) {
+      // Wall properties
+      double wallX = offsetX + 16 + double.parse(wall['x'].toString()) * 16; // Wall's X position with offset
+      double wallY = offsetY + 16 + double.parse(wall['y'].toString()) * 16; // Wall's Y position with offset
+      double wallSize = 16; // Wall size
+
+      // Define the wall rect
+      Rect wallRect = Rect.fromLTWH(wallX, wallY, wallSize, wallSize);
+
+      // Draw the wall
+      c.drawRect(wallRect, wallPaint);
+    }
+
+    // Place the ball once the maze is rendered
+    if (isMazeRendered && !isBallPlaced) {
+      placeBallInFreeSpace();
+    }
+
+    // Draw the player (ball) if it has been placed
+    if (isBallPlaced) {
+      Paint playerPaint = Paint();
+      playerPaint.color = Colors.blue;
+      c.drawCircle(Offset(playerX + offsetX, playerY + offsetY), playerRadius, playerPaint);
+    }
+
+    // Draw win message if the player has won
+    if (hasWon && screenSize != null) {
+      WakelockPlus.disable();
+      TextPainter winTextPainter = TextPainter(
+        text: TextSpan(
+          text: 'Alarm silenced!',
+          style: TextStyle(color: Colors.green, fontSize: 32, fontWeight: FontWeight.bold),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      winTextPainter.layout();
+      winTextPainter.paint(c, Offset(screenSize!.x / 2 - winTextPainter.width / 2, screenSize!.y - winTextPainter.height * 4));
+    }
   }
-}
 
   @override
   void update(double t) {

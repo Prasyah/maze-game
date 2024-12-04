@@ -8,17 +8,22 @@ class RecursiveMaze {
     //
   }
 
-  List build(int width, int height,
-      {OrientationType orientationType = OrientationType.symmetrical}) {
+  // Update build method to be asynchronous
+  Future<List> buildAsync(int width, int height,
+      {OrientationType orientationType = OrientationType.symmetrical}) async {
     mOrientationType = orientationType;
     List wallList = [];
 
+    // Call synchronous functions to initialize walls
     getSquare(width, height, wallList);
-    divideChamber(0, 0, width, height, wallList, true);
+
+    // Await the asynchronous divideChamber call
+    await divideChamber(0, 0, width, height, wallList, true);
 
     return wallList;
   }
 
+  // Function to initialize the border walls
   void getSquare(int width, int height, List wallList) {
     for (int y = 0; y < height + 2; y++) {
       wallList.add({'x': -1, 'y': y - 1});
@@ -34,7 +39,8 @@ class RecursiveMaze {
     }
   }
 
-  Future divideChamber(int posX, int posY, int width, int height, List wallList,
+  // Recursive async function to divide chambers and add walls
+  Future<void> divideChamber(int posX, int posY, int width, int height, List wallList,
       bool isVertical) async {
     if (width <= 1 || height <= 1) return;
 
@@ -50,7 +56,7 @@ class RecursiveMaze {
       for (int y = 0; y < height; y++) {
         if (r != y) {
           wallList.add({'x': posX + halfWallX, 'y': posY + y});
-          await Future.delayed(Duration(milliseconds: 10));
+          await Future.delayed(Duration(milliseconds: 10)); // Simulate async delay
         }
       }
     } else {
@@ -59,7 +65,7 @@ class RecursiveMaze {
       for (int x = 0; x < width; x++) {
         if (r != x) {
           wallList.add({'x': posX + x, 'y': posY + halfWallY});
-          await Future.delayed(Duration(milliseconds: 10));
+          await Future.delayed(Duration(milliseconds: 10)); // Simulate async delay
         }
       }
     }
@@ -73,6 +79,7 @@ class RecursiveMaze {
       nextHeight = halfWallY;
     }
 
+    // Recursive calls
     if (halfWallX >= 1 || halfWallY >= 2) {
       var orientation =
           isVerticalOrientation(nextWidth, nextHeight, isVertical);
@@ -102,13 +109,13 @@ class RecursiveMaze {
     }
   }
 
-  bool isVerticalOrientation(width, height, previousOrientation) {
+  bool isVerticalOrientation(int width, int height, bool previousOrientation) {
     if (mOrientationType == OrientationType.randomized) {
       if (width < height) {
         return false;
-      } else if (height < width)
+      } else if (height < width) {
         return true;
-      else {
+      } else {
         return Random().nextInt(2) == 0;
       }
     } else {
