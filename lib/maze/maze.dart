@@ -4,6 +4,7 @@ import 'package:flame/game.dart';
 import 'package:sensors_plus/sensors_plus.dart'; // Import the sensors package
 import 'package:flutter/services.dart'; // Import services for keeping the screen on
 import 'dart:async'; // Import async package for better event handling
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class Maze extends Game {
   late List walls;
@@ -17,18 +18,33 @@ class Maze extends Game {
   double gravityY = 0; // Gravity acceleration in Y direction
   double velocityX = 0; // Horizontal velocity of the player
   double velocityY = 0; // Vertical velocity of the player
-  double bounceFactor = -0.6; // Bounce factor to reverse velocity and reduce it
 
   Vector2? screenSize; // Store the size of the canvas
   bool isMazeRendered = false; // Flag to track if the maze is fully rendered
   bool isBallPlaced = false; // Flag to track if the ball has been placed
+  bool hasWon = false; // Flag to indicate if the player has won
 
   double accelerometerX = 0; // Variable to store accelerometer X value
   double accelerometerY = 0; // Variable to store accelerometer Y value
 
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
+  // Timer-related variables
+  late Timer _timer;
+  int _elapsedSeconds = 0;
+
+  String getFormattedTime() {
+    int minutes = _elapsedSeconds ~/ 60;
+    int seconds = _elapsedSeconds % 60;
+    String minutesStr = minutes.toString().padLeft(2, '0');
+    String secondsStr = seconds.toString().padLeft(2, '0');
+    return "$minutesStr:$secondsStr";
+  }
+
   Maze() {
+    // Make the screen to stay awake
+    WakelockPlus.enable();
+
     // Build the maze and initiate the walls
     walls = RecursiveMaze().build(21, 21, orientationType: OrientationType.randomized);
 
@@ -47,6 +63,8 @@ class Maze extends Game {
   void onDetach() {
     // Cancel the accelerometer subscription when the game is detached
     _accelerometerSubscription?.cancel();
+    _timer.cancel();
+    WakelockPlus.disable();
     super.onDetach();
   }
 
@@ -71,10 +89,23 @@ class Maze extends Game {
           playerY = 16 + y * 16 + playerRadius; // Center the ball in the cell
           isBallPlaced = true; // Set ball placed flag to true
           startAccelerometer(); // Start reading accelerometer once the ball is placed
+          
+          // Start the timer when the ball is placed
+          _startTimer();
+
           return;
         }
       }
     }
+  }
+
+  void _startTimer() {
+    _elapsedSeconds = 0;
+    // Start the timer with 1-second intervals
+    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      _elapsedSeconds++;
+      // You can add any logic to stop the timer when the game ends
+    });
   }
 
   bool isWall(int gridX, int gridY) {
@@ -94,64 +125,84 @@ class Maze extends Game {
   }
 
   @override
-  void render(Canvas c) {
-    if (screenSize == null) return; // If the size isn't initialized yet, do nothing
+void render(Canvas c) {
+  if (screenSize == null) return; // If the size isn't initialized yet, do nothing
 
-    var bgPaint = Paint();
-    bgPaint.color = Colors.black;
+  var bgPaint = Paint();
+  bgPaint.color = Colors.black;
 
-    // Draw the background
-    c.drawRect(
-      Rect.fromLTWH(0, 0, screenSize!.x, screenSize!.y),
-      bgPaint,
-    );
+  // Draw the background
+  c.drawRect(
+    Rect.fromLTWH(0, 0, screenSize!.x, screenSize!.y),
+    bgPaint,
+  );
 
-    // Set up the wall paint object
-    Paint wallPaint = Paint();
-    wallPaint.color = Colors.white;
+  // Draw the formatted timer above the maze
+  String formattedTime = getFormattedTime();
+  TextPainter timerTextPainter = TextPainter(
+    text: TextSpan(
+      text: 'Elapsed Time: $formattedTime',
+      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+    ),
+    textDirection: TextDirection.ltr,
+  );
+  timerTextPainter.layout();
+  timerTextPainter.paint(c, Offset(screenSize!.x / 2 - timerTextPainter.width / 2, timerTextPainter.height * 2));
 
-    for (var wall in walls) {
-      // Wall properties
-      double wallX = 16 + double.parse(wall['x'].toString()) * 16;
-      double wallY = 16 + double.parse(wall['y'].toString()) * 16;
-      double wallSize = 16;
+  // Calculate the center offset for the maze
+  double mazeWidth = 21 * 16;  // Width of the maze (21 cells * 16 pixels per cell)
+  double mazeHeight = 21 * 16; // Height of the maze (21 cells * 16 pixels per cell)
+  double offsetX = (screenSize!.x - mazeWidth - 32) / 2; // Horizontal offset to center maze
+  double offsetY = (screenSize!.y - mazeHeight - 32) / 2; // Vertical offset to center maze
 
-      // Define the wall rect
-      Rect wallRect = Rect.fromLTWH(wallX, wallY, wallSize, wallSize);
+  // Set up the wall paint object
+  Paint wallPaint = Paint();
+  wallPaint.color = Colors.white;
 
-      // Draw the wall
-      c.drawRect(wallRect, wallPaint);
-    }
+  // Draw the walls
+  for (var wall in walls) {
+    // Wall properties
+    double wallX = offsetX + 16 + double.parse(wall['x'].toString()) * 16; // Wall's X position with offset
+    double wallY = offsetY + 16 + double.parse(wall['y'].toString()) * 16; // Wall's Y position with offset
+    double wallSize = 16; // Wall size
 
-    // Place the ball once the maze is rendered
-    if (isMazeRendered && !isBallPlaced) {
-      placeBallInFreeSpace();
-    }
+    // Define the wall rect
+    Rect wallRect = Rect.fromLTWH(wallX, wallY, wallSize, wallSize);
 
-    // Draw the player (ball) if it has been placed
-    if (isBallPlaced) {
-      Paint playerPaint = Paint();
-      playerPaint.color = Colors.blue;
-      c.drawCircle(Offset(playerX, playerY), playerRadius, playerPaint);
-    }
-
-    // Draw accelerometer readings at the bottom of the screen
-    if (screenSize != null) {
-      TextPainter textPainter = TextPainter(
-        text: TextSpan(
-          text: 'Accelerometer X: ${accelerometerX.toStringAsFixed(2)}, Y: ${accelerometerY.toStringAsFixed(2)}',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      textPainter.paint(c, Offset(10, screenSize!.y - 30));
-    }
+    // Draw the wall
+    c.drawRect(wallRect, wallPaint);
   }
+
+  // Place the ball once the maze is rendered
+  if (isMazeRendered && !isBallPlaced) {
+    placeBallInFreeSpace();
+  }
+
+  // Draw the player (ball) if it has been placed
+  if (isBallPlaced) {
+    Paint playerPaint = Paint();
+    playerPaint.color = Colors.blue;
+    c.drawCircle(Offset(playerX + offsetX, playerY + offsetY), playerRadius, playerPaint);
+  }
+
+  // Draw win message if the player has won
+  if (hasWon && screenSize != null) {
+    WakelockPlus.disable();
+    TextPainter winTextPainter = TextPainter(
+      text: TextSpan(
+        text: 'Alarm silenced!',
+        style: TextStyle(color: Colors.green, fontSize: 32, fontWeight: FontWeight.bold),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    winTextPainter.layout();
+    winTextPainter.paint(c, Offset(screenSize!.x / 2 - winTextPainter.width / 2, screenSize!.y - winTextPainter.height * 4));
+  }
+}
 
   @override
   void update(double t) {
-    if (!isBallPlaced) return; // No updates needed if the ball isn't placed yet
+    if (!isBallPlaced || hasWon) return; // No updates needed if the ball isn't placed or player has won
 
     // Apply gravity to the velocity
     velocityX += gravityX * t;
@@ -172,6 +223,11 @@ class Maze extends Game {
       playerY = newPlayerY; // Update Y position if no collision
     } else {
       velocityY = 0; // Stop vertical movement on collision
+    }
+
+    // Check if the player has reached the lower right corner of the maze
+    if (playerX >= 16 + (20 * 16) && playerY >= 16 + (20 * 16)) {
+      hasWon = true; // Set win flag to true
     }
   }
 
